@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+spacy
+pymupdf
+python-docx
+pillow
+pytesseract

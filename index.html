@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Document Analyzer</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px auto;
+            width: 60%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #22c55e;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+        }
+
+        input {
+            margin: 10px;
+        }
+
+        pre {
+            text-align: left;
+            white-space: pre-wrap;
+        }
+
+        #highlightedText {
+            text-align: left;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🤖 AI Document Analyzer</h1>
+
+<div class="card">
+    <input type="file" id="fileInput">
+    <br>
+    <button onclick="upload()">Analyze</button>
+    <button onclick="downloadResult()">Download</button>
+</div>
+
+<div class="card">
+    <h3>📄 Summary</h3>
+    <p id="summary"></p>
+</div>
+
+<div class="card">
+    <h3>😊 Sentiment</h3>
+    <p id="sentiment"></p>
+</div>
+
+<div class="card">
+    <h3>🧠 Entities</h3>
+    <pre id="entities"></pre>
+</div>
+
+<div class="card">
+    <h3>📄 Highlighted Text</h3>
+    <div id="highlightedText"></div>
+</div>
+
+<script>
+
+// 🔥 Highlight function
+function highlightText(text, entities) {
+    let highlighted = text;
+
+    entities.names.forEach(name => {
+        highlighted = highlighted.replaceAll(
+            name,
+            `<span style="background: yellow; color:black;">${name}</span>`
+        );
+    });
+
+    entities.organizations.forEach(org => {
+        highlighted = highlighted.replaceAll(
+            org,
+            `<span style="background: lightblue; color:black;">${org}</span>`
+        );
+    });
+
+    entities.dates.forEach(date => {
+        highlighted = highlighted.replaceAll(
+            date,
+            `<span style="background: lightgreen; color:black;">${date}</span>`
+        );
+    });
+
+    entities.amounts.forEach(amount => {
+        highlighted = highlighted.replaceAll(
+            amount,
+            `<span style="background: pink; color:black;">${amount}</span>`
+        );
+    });
+
+    return highlighted;
+}
+
+
+// 🚀 Upload function
+async function upload() {
+    const file = document.getElementById("fileInput").files[0];
+
+    if (!file) {
+        alert("Please select a file");
+        return;
+    }
+
+    document.getElementById("summary").innerText = "Processing... ⏳";
+    document.getElementById("sentiment").innerText = "";
+    document.getElementById("entities").innerText = "";
+    document.getElementById("highlightedText").innerText = "";
+
+    const reader = new FileReader();
+
+    reader.onload = async function() {
+        const base64 = reader.result.split(",")[1];
+
+        const res = await fetch("http://127.0.0.1:8000/api/document-analyze", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-api-key": "test123"
+            },
+            body: JSON.stringify({
+                fileName: file.name,
+                fileType: file.name.split('.').pop(),
+                fileBase64: base64
+            })
+        });
+
+        const data = await res.json();
+
+        document.getElementById("summary").innerText = data.summary;
+        document.getElementById("sentiment").innerText = data.sentiment;
+        document.getElementById("entities").innerText =
+            JSON.stringify(data.entities, null, 2);
+
+        // 🔥 Highlight text
+        const highlighted = highlightText(data.text, data.entities);
+        document.getElementById("highlightedText").innerHTML = highlighted;
+    };
+
+    reader.readAsDataURL(file);
+}
+
+
+// 📥 Download result
+function downloadResult() {
+    const summary = document.getElementById("summary").innerText;
+    const sentiment = document.getElementById("sentiment").innerText;
+    const entities = document.getElementById("entities").innerText;
+
+    const content = `
+SUMMARY:
+${summary}
+
+SENTIMENT:
+${sentiment}
+
+ENTITIES:
+${entities}
+`;
+
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "analysis.txt";
+    a.click();
+}
+
+</script>
+
+</body>
+</html>
