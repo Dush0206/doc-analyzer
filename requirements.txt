@@ -1,7 +1,6 @@
 fastapi
 uvicorn
-transformers
-torch
+transformers==4.36.2
 spacy
 pymupdf
 python-docx
