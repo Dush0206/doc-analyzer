@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from transformers import pipeline
 import spacy
 import fitz
 from docx import Document
@@ -14,7 +13,7 @@ app = FastAPI()
 
 API_KEY = "test123"
 
-# ✅ Enable CORS (important for frontend)
+# ✅ Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,23 +23,13 @@ app.add_middleware(
 )
 
 # =========================
-# ✅ LOAD MODELS (ONCE)
+# ✅ LIGHTWEIGHT NLP
 # =========================
-print("🔄 Loading AI models...")
+print("🔄 Loading lightweight NLP...")
 
-summarizer = pipeline(
-    "text2text-generation",
-    model="sshleifer/distilbart-cnn-6-6"
-)
+nlp = spacy.blank("en")  # ✅ NO heavy model
 
-sentiment_model = pipeline(
-    "sentiment-analysis",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
-
-nlp = spacy.load("en_core_web_sm")
-
-print("✅ Models loaded successfully!")
+print("✅ Lightweight NLP loaded!")
 
 # =========================
 # 📄 TEXT EXTRACTION
@@ -70,54 +59,46 @@ def extract_text(file_bytes, file_type):
     return ""
 
 # =========================
-# 🤖 SUMMARY
+# 🤖 SIMPLE SUMMARY
 # =========================
 def generate_summary(text):
-    if len(text) < 50:
-        return text
-
-    result = summarizer(
-        "summarize: " + text[:500],
-        max_length=120,
-        min_length=30,
-        do_sample=False
-    )
-
-    return result[0]['generated_text']
+    sentences = text.split(".")
+    return ".".join(sentences[:3])  # first 3 sentences
 
 # =========================
-# 🧠 ENTITY EXTRACTION
+# 🧠 SIMPLE ENTITY EXTRACTION
 # =========================
 def extract_entities(text):
-    doc = nlp(text)
+    words = text.split()
 
-    names, orgs, dates, money = [], [], [], []
-
-    for ent in doc.ents:
-        if ent.label_ == "PERSON":
-            names.append(ent.text)
-        elif ent.label_ == "ORG":
-            orgs.append(ent.text)
-        elif ent.label_ == "DATE":
-            dates.append(ent.text)
-        elif ent.label_ == "MONEY":
-            money.append(ent.text)
+    names = [w for w in words if w.istitle()]
+    dates = [w for w in words if any(char.isdigit() for char in w)]
 
     return {
-        "names": list(set(names)),
-        "organizations": list(set(orgs)),
-        "dates": list(set(dates)),
-        "amounts": list(set(money))
+        "names": list(set(names[:10])),
+        "organizations": [],
+        "dates": list(set(dates[:10])),
+        "amounts": []
     }
 
 # =========================
-# 😊 SENTIMENT
+# 😊 SIMPLE SENTIMENT
 # =========================
 def analyze_sentiment(text):
-    chunks = [text[i:i+512] for i in range(0, len(text), 512)]
-    results = [sentiment_model(chunk)[0]['label'] for chunk in chunks]
+    positive_words = ["good", "great", "excellent", "happy"]
+    negative_words = ["bad", "poor", "sad", "worst"]
 
-    return max(set(results), key=results.count)
+    text_lower = text.lower()
+
+    pos = sum(word in text_lower for word in positive_words)
+    neg = sum(word in text_lower for word in negative_words)
+
+    if pos > neg:
+        return "POSITIVE"
+    elif neg > pos:
+        return "NEGATIVE"
+    else:
+        return "NEUTRAL"
 
 # =========================
 # 🏠 SERVE FRONTEND
@@ -149,28 +130,21 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     if not file_name or not file_type or not file_base64:
         raise HTTPException(status_code=400, detail="Missing required fields")
 
-    # Decode Base64
     try:
         file_bytes = base64.b64decode(file_base64)
     except:
         raise HTTPException(status_code=400, detail="Invalid Base64 data")
 
-    # Extract text
     text = extract_text(file_bytes, file_type)
 
     if not text.strip():
         raise HTTPException(status_code=400, detail="No text extracted")
 
-    # AI Processing
-    summary = generate_summary(text)
-    entities = extract_entities(text)
-    sentiment = analyze_sentiment(text)
-
     return {
         "status": "success",
         "fileName": file_name,
         "text": text,
-        "summary": summary,
-        "entities": entities,
-        "sentiment": sentiment
+        "summary": generate_summary(text),
+        "entities": extract_entities(text),
+        "sentiment": analyze_sentiment(text)
     }
