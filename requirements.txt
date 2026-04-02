@@ -7,4 +7,3 @@ pymupdf
 python-docx
 pillow
 pytesseract
-en-core-web-sm
