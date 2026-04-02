@@ -30,7 +30,7 @@ print("🔄 Loading AI models...")
 
 summarizer = pipeline(
     "text2text-generation",
-    model="google/flan-t5-small"
+    model="sshleifer/distilbart-cnn-6-6"
 )
 
 sentiment_model = pipeline(
