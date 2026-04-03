@@ -87,37 +87,38 @@
 
 <script>
 
+// 🔥 Safe highlight (prevents breaking words)
+function safeHighlight(text, word, color) {
+    const regex = new RegExp(`\\b${word}\\b`, "gi");
+    return text.replace(regex, `<span style="background:${color}; color:black;">${word}</span>`);
+}
+
 // 🔥 Highlight function
 function highlightText(text, entities) {
     let highlighted = text;
 
     entities.names.forEach(name => {
-        highlighted = highlighted.replaceAll(
-            name,
-            `<span style="background: yellow; color:black;">${name}</span>`
-        );
+        highlighted = safeHighlight(highlighted, name, "yellow");
     });
 
     entities.organizations.forEach(org => {
-        highlighted = highlighted.replaceAll(
-            org,
-            `<span style="background: lightblue; color:black;">${org}</span>`
-        );
+        highlighted = safeHighlight(highlighted, org, "lightblue");
     });
 
     entities.dates.forEach(date => {
-        highlighted = highlighted.replaceAll(
-            date,
-            `<span style="background: lightgreen; color:black;">${date}</span>`
-        );
+        highlighted = safeHighlight(highlighted, date, "lightgreen");
     });
 
     entities.amounts.forEach(amount => {
-        highlighted = highlighted.replaceAll(
-            amount,
-            `<span style="background: pink; color:black;">${amount}</span>`
-        );
+        highlighted = safeHighlight(highlighted, amount, "pink");
     });
+
+    // ✅ Keywords highlight
+    if (entities.keywords) {
+        entities.keywords.forEach(keyword => {
+            highlighted = safeHighlight(highlighted, keyword, "orange");
+        });
+    }
 
     return highlighted;
 }
@@ -132,7 +133,6 @@ async function upload() {
         return;
     }
 
-    // ✅ Loading state
     document.getElementById("summary").innerHTML = "<span class='loading'>⏳ Analyzing...</span>";
     document.getElementById("sentiment").innerHTML = "";
     document.getElementById("entities").innerHTML = "";
@@ -168,12 +168,13 @@ async function upload() {
 
         document.getElementById("sentiment").innerHTML = `${emoji} ${data.sentiment}`;
 
-        // ✅ Clean Entities display
+        // ✅ Entities + Keywords
         document.getElementById("entities").innerHTML = `
             <b>👤 Names:</b> ${data.entities.names.join(", ") || "None"} <br><br>
             <b>🏢 Organizations:</b> ${data.entities.organizations.join(", ") || "None"} <br><br>
             <b>📅 Dates:</b> ${data.entities.dates.join(", ") || "None"} <br><br>
-            <b>💰 Amounts:</b> ${data.entities.amounts.join(", ") || "None"}
+            <b>💰 Amounts:</b> ${data.entities.amounts.join(", ") || "None"} <br><br>
+            <b>🔑 Keywords:</b> ${data.entities.keywords ? data.entities.keywords.join(", ") : "None"}
         `;
 
         // 🔥 Highlight text
