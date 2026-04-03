@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import spacy
 import fitz
@@ -8,6 +8,11 @@ from PIL import Image
 import pytesseract
 import io
 import base64
+
+# ✅ PDF imports
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
 
 app = FastAPI()
 
@@ -26,9 +31,7 @@ app.add_middleware(
 # ✅ LIGHTWEIGHT NLP
 # =========================
 print("🔄 Loading lightweight NLP...")
-
-nlp = spacy.blank("en")  # ✅ NO heavy model
-
+nlp = spacy.blank("en")
 print("✅ Lightweight NLP loaded!")
 
 # =========================
@@ -59,19 +62,21 @@ def extract_text(file_bytes, file_type):
     return ""
 
 # =========================
-# 🤖 SIMPLE SUMMARY
+# 🤖 SUMMARY
 # =========================
 def generate_summary(text):
     sentences = text.split(".")
-    return ".".join(sentences[:3])  # first 3 sentences
+    return ".".join(sentences[:3])
 
 # =========================
-# 🧠 SIMPLE ENTITY EXTRACTION
+# 🧠 ENTITY EXTRACTION (IMPROVED)
 # =========================
 def extract_entities(text):
     words = text.split()
 
-    names = [w for w in words if w.istitle()]
+    stopwords = ["The", "On", "In", "And", "A", "An"]
+
+    names = [w for w in words if w.istitle() and w not in stopwords]
     dates = [w for w in words if any(char.isdigit() for char in w)]
 
     return {
@@ -82,7 +87,7 @@ def extract_entities(text):
     }
 
 # =========================
-# 😊 SIMPLE SENTIMENT
+# 😊 SENTIMENT
 # =========================
 def analyze_sentiment(text):
     positive_words = ["good", "great", "excellent", "happy"]
@@ -140,11 +145,53 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     if not text.strip():
         raise HTTPException(status_code=400, detail="No text extracted")
 
+    summary = generate_summary(text)
+    entities = extract_entities(text)
+    sentiment = analyze_sentiment(text)
+
     return {
         "status": "success",
         "fileName": file_name,
         "text": text,
-        "summary": generate_summary(text),
-        "entities": extract_entities(text),
-        "sentiment": analyze_sentiment(text)
+        "summary": summary,
+        "entities": entities,
+        "sentiment": sentiment
     }
+
+# =========================
+# 📄 PDF DOWNLOAD API
+# =========================
+@app.post("/api/download-pdf")
+def download_pdf(data: dict, x_api_key: str = Header(None)):
+
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer)
+    styles = getSampleStyleSheet()
+
+    content = []
+
+    content.append(Paragraph("AI Document Analysis Report", styles["Title"]))
+    content.append(Spacer(1, 20))
+
+    content.append(Paragraph(f"Summary: {data.get('summary')}", styles["Normal"]))
+    content.append(Spacer(1, 10))
+
+    content.append(Paragraph(f"Sentiment: {data.get('sentiment')}", styles["Normal"]))
+    content.append(Spacer(1, 10))
+
+    entities = data.get("entities", {})
+
+    content.append(Paragraph(f"Names: {', '.join(entities.get('names', []))}", styles["Normal"]))
+    content.append(Paragraph(f"Organizations: {', '.join(entities.get('organizations', []))}", styles["Normal"]))
+    content.append(Paragraph(f"Dates: {', '.join(entities.get('dates', []))}", styles["Normal"]))
+    content.append(Paragraph(f"Amounts: {', '.join(entities.get('amounts', []))}", styles["Normal"]))
+
+    doc.build(content)
+    buffer.seek(0)
+
+    return StreamingResponse(buffer, media_type="application/pdf", headers={
+        "Content-Disposition": "attachment; filename=analysis.pdf"
+    })

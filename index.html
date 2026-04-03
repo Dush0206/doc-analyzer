@@ -14,34 +14,43 @@
         .card {
             background: #1e293b;
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin: 20px auto;
             width: 60%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
         }
 
         button {
-            padding: 10px 20px;
+            padding: 12px 22px;
             background: #22c55e;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
             font-weight: bold;
             margin: 5px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: #16a34a;
         }
 
         input {
             margin: 10px;
         }
 
-        pre {
-            text-align: left;
-            white-space: pre-wrap;
-        }
-
         #highlightedText {
             text-align: left;
             line-height: 1.6;
+        }
+
+        .title {
+            color: #00ffcc;
+        }
+
+        .loading {
+            color: #facc15;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -57,22 +66,22 @@
 </div>
 
 <div class="card">
-    <h3>📄 Summary</h3>
+    <h3 class="title">📄 Summary</h3>
     <p id="summary"></p>
 </div>
 
 <div class="card">
-    <h3>😊 Sentiment</h3>
+    <h3 class="title">😊 Sentiment</h3>
     <p id="sentiment"></p>
 </div>
 
 <div class="card">
-    <h3>🧠 Entities</h3>
-    <pre id="entities"></pre>
+    <h3 class="title">🧠 Entities</h3>
+    <div id="entities"></div>
 </div>
 
 <div class="card">
-    <h3>📄 Highlighted Text</h3>
+    <h3 class="title">📄 Highlighted Text</h3>
     <div id="highlightedText"></div>
 </div>
 
@@ -123,17 +132,18 @@ async function upload() {
         return;
     }
 
-    document.getElementById("summary").innerText = "Processing... ⏳";
-    document.getElementById("sentiment").innerText = "";
-    document.getElementById("entities").innerText = "";
-    document.getElementById("highlightedText").innerText = "";
+    // ✅ Loading state
+    document.getElementById("summary").innerHTML = "<span class='loading'>⏳ Analyzing...</span>";
+    document.getElementById("sentiment").innerHTML = "";
+    document.getElementById("entities").innerHTML = "";
+    document.getElementById("highlightedText").innerHTML = "";
 
     const reader = new FileReader();
 
     reader.onload = async function() {
         const base64 = reader.result.split(",")[1];
 
-        const res = await fetch("http://127.0.0.1:8000/api/document-analyze", {
+        const res = await fetch("https://doc-analyzer-wfsh.onrender.com/api/document-analyze", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -148,10 +158,23 @@ async function upload() {
 
         const data = await res.json();
 
+        // ✅ Summary
         document.getElementById("summary").innerText = data.summary;
-        document.getElementById("sentiment").innerText = data.sentiment;
-        document.getElementById("entities").innerText =
-            JSON.stringify(data.entities, null, 2);
+
+        // ✅ Sentiment with emoji
+        let emoji = "😐";
+        if (data.sentiment === "POSITIVE") emoji = "😊";
+        if (data.sentiment === "NEGATIVE") emoji = "😞";
+
+        document.getElementById("sentiment").innerHTML = `${emoji} ${data.sentiment}`;
+
+        // ✅ Clean Entities display
+        document.getElementById("entities").innerHTML = `
+            <b>👤 Names:</b> ${data.entities.names.join(", ") || "None"} <br><br>
+            <b>🏢 Organizations:</b> ${data.entities.organizations.join(", ") || "None"} <br><br>
+            <b>📅 Dates:</b> ${data.entities.dates.join(", ") || "None"} <br><br>
+            <b>💰 Amounts:</b> ${data.entities.amounts.join(", ") || "None"}
+        `;
 
         // 🔥 Highlight text
         const highlighted = highlightText(data.text, data.entities);
