@@ -28,6 +28,11 @@ app.add_middleware(
 )
 
 # =========================
+# 🔥 HISTORY STORE (NEW)
+# =========================
+history_store = []
+
+# =========================
 # ✅ LIGHTWEIGHT NLP
 # =========================
 print("🔄 Loading lightweight NLP...")
@@ -69,7 +74,7 @@ def generate_summary(text):
     return ". ".join(sentences[:3])
 
 # =========================
-# 🧠 IMPROVED ENTITY + KEYWORDS
+# 🧠 ENTITY + KEYWORDS
 # =========================
 def extract_entities(text):
     words = text.split()
@@ -86,7 +91,6 @@ def extract_entities(text):
         if any(char.isdigit() for char in w)
     ]
 
-    # 🔥 NEW: Keywords
     keywords = list(set([
         w.lower() for w in words
         if len(w) > 6 and w.isalpha()
@@ -163,7 +167,7 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     entities = extract_entities(text)
     sentiment = analyze_sentiment(text)
 
-    return {
+    result = {
         "status": "success",
         "fileName": file_name,
         "text": text,
@@ -172,8 +176,20 @@ def analyze(data: dict, x_api_key: str = Header(None)):
         "sentiment": sentiment
     }
 
+    # 🔥 SAVE HISTORY
+    history_store.append(result)
+
+    return result
+
 # =========================
-# 📄 IMPROVED PDF API
+# 📜 HISTORY API (NEW)
+# =========================
+@app.get("/api/history")
+def get_history():
+    return history_store[::-1]  # latest first
+
+# =========================
+# 📄 PDF API
 # =========================
 @app.post("/api/download-pdf")
 def download_pdf(data: dict, x_api_key: str = Header(None)):
@@ -187,21 +203,17 @@ def download_pdf(data: dict, x_api_key: str = Header(None)):
 
     content = []
 
-    # 🔥 Title
     content.append(Paragraph("📄 AI Document Analysis Report", styles["Title"]))
     content.append(Spacer(1, 20))
 
-    # 🔹 Summary
     content.append(Paragraph("<b>Summary</b>", styles["Heading2"]))
     content.append(Paragraph(data.get("summary", ""), styles["Normal"]))
     content.append(Spacer(1, 15))
 
-    # 🔹 Sentiment
     content.append(Paragraph("<b>Sentiment</b>", styles["Heading2"]))
     content.append(Paragraph(data.get("sentiment", ""), styles["Normal"]))
     content.append(Spacer(1, 15))
 
-    # 🔹 Entities
     entities = data.get("entities", {})
 
     content.append(Paragraph("<b>Entities</b>", styles["Heading2"]))

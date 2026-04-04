@@ -85,9 +85,15 @@
     <div id="highlightedText"></div>
 </div>
 
+<!-- ✅ NEW HISTORY SECTION -->
+<div class="card">
+    <h3 class="title">📜 History</h3>
+    <div id="history"></div>
+</div>
+
 <script>
 
-// 🔥 Safe highlight (prevents breaking words)
+// 🔥 Safe highlight
 function safeHighlight(text, word, color) {
     const regex = new RegExp(`\\b${word}\\b`, "gi");
     return text.replace(regex, `<span style="background:${color}; color:black;">${word}</span>`);
@@ -113,7 +119,6 @@ function highlightText(text, entities) {
         highlighted = safeHighlight(highlighted, amount, "pink");
     });
 
-    // ✅ Keywords highlight
     if (entities.keywords) {
         entities.keywords.forEach(keyword => {
             highlighted = safeHighlight(highlighted, keyword, "orange");
@@ -123,8 +128,7 @@ function highlightText(text, entities) {
     return highlighted;
 }
 
-
-// 🚀 Upload function
+// 🚀 Upload
 async function upload() {
     const file = document.getElementById("fileInput").files[0];
 
@@ -158,17 +162,14 @@ async function upload() {
 
         const data = await res.json();
 
-        // ✅ Summary
         document.getElementById("summary").innerText = data.summary;
 
-        // ✅ Sentiment with emoji
         let emoji = "😐";
         if (data.sentiment === "POSITIVE") emoji = "😊";
         if (data.sentiment === "NEGATIVE") emoji = "😞";
 
         document.getElementById("sentiment").innerHTML = `${emoji} ${data.sentiment}`;
 
-        // ✅ Entities + Keywords
         document.getElementById("entities").innerHTML = `
             <b>👤 Names:</b> ${data.entities.names.join(", ") || "None"} <br><br>
             <b>🏢 Organizations:</b> ${data.entities.organizations.join(", ") || "None"} <br><br>
@@ -177,16 +178,36 @@ async function upload() {
             <b>🔑 Keywords:</b> ${data.entities.keywords ? data.entities.keywords.join(", ") : "None"}
         `;
 
-        // 🔥 Highlight text
         const highlighted = highlightText(data.text, data.entities);
         document.getElementById("highlightedText").innerHTML = highlighted;
+
+        // 🔥 Load history after analysis
+        loadHistory();
     };
 
     reader.readAsDataURL(file);
 }
 
+// 📜 Load history
+async function loadHistory() {
+    const res = await fetch("https://doc-analyzer-wfsh.onrender.com/api/history");
+    const data = await res.json();
 
-// 📥 Download result
+    let html = "";
+
+    data.forEach(item => {
+        html += `
+            <div style="border-bottom:1px solid gray; margin-bottom:10px; padding:5px;">
+                <b>📄 ${item.fileName}</b><br>
+                <small>${item.summary.substring(0, 80)}...</small>
+            </div>
+        `;
+    });
+
+    document.getElementById("history").innerHTML = html;
+}
+
+// 📥 Download
 function downloadResult() {
     const summary = document.getElementById("summary").innerText;
     const sentiment = document.getElementById("sentiment").innerText;
@@ -211,6 +232,9 @@ ${entities}
     a.download = "analysis.txt";
     a.click();
 }
+
+// 🔥 Load history on page load
+window.onload = loadHistory;
 
 </script>
 
