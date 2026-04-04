@@ -1,37 +1,54 @@
 <!DOCTYPE html>
+
 <html>
 <head>
     <title>AI Document Analyzer</title>
-    <style>
-        body {
-            font-family: Arial;
-            background: linear-gradient(135deg, #0f172a, #020617);
-            color: white;
-            text-align: center;
-            padding: 30px;
-        }
 
-        h1 { color: #00ffcc; }
+```
+<!-- Prevent cache issues -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 
-        .card {
-            background: #1e293b;
-            padding: 20px;
-            border-radius: 12px;
-            margin: 20px auto;
-            width: 60%;
-        }
+<style>
+    body {
+        font-family: Arial;
+        background: linear-gradient(135deg, #0f172a, #020617);
+        color: white;
+        text-align: center;
+        padding: 30px;
+    }
 
-        button {
-            padding: 10px;
-            margin: 5px;
-            background: #22c55e;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
+    h1 { color: #00ffcc; }
 
-        button:hover { background: #16a34a; }
-    </style>
+    .card {
+        background: #1e293b;
+        padding: 20px;
+        border-radius: 12px;
+        margin: 20px auto;
+        width: 60%;
+    }
+
+    button {
+        padding: 10px;
+        margin: 5px;
+        background: #22c55e;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    button:hover { background: #16a34a; }
+
+    #summary {
+        white-space: pre-line;
+    }
+
+    .section {
+        text-align: left;
+        margin-top: 10px;
+    }
+</style>
+```
+
 </head>
 <body>
 
@@ -66,32 +83,57 @@ async function upload() {
     const file = document.getElementById("fileInput").files[0];
     if (!file) return alert("Select file");
 
+    document.getElementById("summary").innerHTML = "⏳ Processing...";
+
     const reader = new FileReader();
 
     reader.onload = async function() {
 
         const base64 = reader.result.split(",")[1];
 
-        const res = await fetch(API_BASE + "/api/document-analyze", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": "sk_track2_987654321"
-            },
-            body: JSON.stringify({
-                fileName: file.name,
-                fileType: file.name.split('.').pop(),
-                fileBase64: base64
-            })
-        });
+        try {
+            const res = await fetch(API_BASE + "/api/document-analyze", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": "sk_track2_987654321"
+                },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    fileType: file.name.split('.').pop(),
+                    fileBase64: base64
+                })
+            });
 
-        const data = await res.json();
+            const data = await res.json();
 
-        document.getElementById("summary").innerText = data.summary;
-        document.getElementById("sentiment").innerText = data.sentiment;
+            // Summary
+            document.getElementById("summary").innerText = data.summary || "No summary";
 
-        document.getElementById("entities").innerText =
-            JSON.stringify(data.entities, null, 2);
+            // Sentiment
+            document.getElementById("sentiment").innerText = data.sentiment || "Unknown";
+
+            // Clean Entities UI (NO JSON)
+            document.getElementById("entities").innerHTML = `
+                <div class="section">
+                    <b>👤 Names:</b><br>
+                    ${data.entities?.names?.join(", ") || "None"}
+                </div>
+
+                <div class="section">
+                    <b>📅 Dates:</b><br>
+                    ${data.entities?.dates?.join(", ") || "None"}
+                </div>
+
+                <div class="section">
+                    <b>🏷 Keywords:</b><br>
+                    ${data.entities?.keywords?.join(", ") || "None"}
+                </div>
+            `;
+
+        } catch (err) {
+            alert("Server error ⚠️");
+        }
     };
 
     reader.readAsDataURL(file);
