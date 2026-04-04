@@ -1,54 +1,52 @@
 <!DOCTYPE html>
-
 <html>
 <head>
     <title>AI Document Analyzer</title>
 
-```
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <!-- Prevent cache -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 
-<style>
-    body {
-        font-family: Arial;
-        background: linear-gradient(135deg, #0f172a, #020617);
-        color: white;
-        text-align: center;
-        padding: 30px;
-    }
+    <style>
+        body {
+            font-family: Arial;
+            background: linear-gradient(135deg, #0f172a, #020617);
+            color: white;
+            text-align: center;
+            padding: 30px;
+        }
 
-    h1 { color: #00ffcc; }
+        h1 { color: #00ffcc; }
 
-    .card {
-        background: #1e293b;
-        padding: 20px;
-        border-radius: 12px;
-        margin: 20px auto;
-        width: 60%;
-    }
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px auto;
+            width: 60%;
+        }
 
-    button {
-        padding: 10px;
-        margin: 5px;
-        background: #22c55e;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-    }
+        button {
+            padding: 10px;
+            margin: 5px;
+            background: #22c55e;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
 
-    button:hover { background: #16a34a; }
+        button:hover { background: #16a34a; }
 
-    #summary {
-        white-space: pre-line;
-    }
+        #summary {
+            white-space: pre-line;
+        }
 
-    .section {
-        text-align: left;
-        margin-top: 10px;
-    }
-</style>
-```
-
+        .section {
+            text-align: left;
+            margin-top: 10px;
+        }
+    </style>
 </head>
+
 <body>
 
 <h1>🤖 AI Document Analyzer</h1>
@@ -77,17 +75,36 @@
 
 const API_BASE = "https://doc-analyzer-wfsh.onrender.com";
 
-// 🔥 CLEAN FUNCTION
-function cleanList(arr) {
+
+// 🔥 FINAL CLEAN FUNCTION (PRO VERSION)
+function cleanList(arr, type = "text") {
+    if (!arr || arr.length === 0) return "None";
+
+    const stopWords = [
+        "the","and","for","with","this","that","on","are","is",
+        "artificial","intelligence","companies","company","data"
+    ];
+
+    return arr
+        .map(x => x.replace(/[^a-zA-Z0-9 ]/g, "").trim())
+        .filter(x => x.length > 2)
+        .filter(x => !stopWords.includes(x.toLowerCase()))
+        .filter(x => type === "names" ? x[0] === x[0].toUpperCase() : true)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join(", ") || "None";
+}
+
+
+// 📅 CLEAN DATES (ONLY NUMBERS LIKE 2025)
+function cleanDates(arr) {
     if (!arr) return "None";
 
     return arr
-        .map(x => x.replace(/[^a-zA-Z0-9 ]/g, "")) // remove symbols
-        .filter(x => x.length > 2) // remove short junk
-        .filter(x => !["the","and","for","with","this","that","on","are","is"].includes(x.toLowerCase()))
-        .filter((v, i, a) => a.indexOf(v) === i) // remove duplicates
+        .filter(x => /^\d{2,4}$/.test(x))
+        .filter((v, i, a) => a.indexOf(v) === i)
         .join(", ") || "None";
 }
+
 
 async function upload() {
 
@@ -119,21 +136,23 @@ async function upload() {
             const data = await res.json();
 
             // Summary
-            document.getElementById("summary").innerText = data.summary || "No summary";
+            document.getElementById("summary").innerText =
+                data.summary || "No summary";
 
             // Sentiment
-            document.getElementById("sentiment").innerText = data.sentiment || "Unknown";
+            document.getElementById("sentiment").innerText =
+                data.sentiment || "Unknown";
 
-            // 🔥 CLEAN ENTITIES OUTPUT
+            // ✅ CLEAN UI OUTPUT
             document.getElementById("entities").innerHTML = `
                 <div class="section">
                     <b>👤 Names:</b><br>
-                    ${cleanList(data.entities?.names)}
+                    ${cleanList(data.entities?.names, "names")}
                 </div>
 
                 <div class="section">
                     <b>📅 Dates:</b><br>
-                    ${cleanList(data.entities?.dates)}
+                    ${cleanDates(data.entities?.dates)}
                 </div>
 
                 <div class="section">
