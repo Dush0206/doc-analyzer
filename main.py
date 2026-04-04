@@ -9,22 +9,49 @@ import pytesseract
 import io
 import base64
 
-# ✅ PDF imports
+# ✅ PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from io import BytesIO
+
+# ✅ DATABASE
+from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 app = FastAPI()
 
 API_KEY = "test123"
 
-# 🔐 USERS (NEW)
-users_db = {}
+# =========================
+# 💾 DATABASE SETUP
+# =========================
+DATABASE_URL = "sqlite:///./app.db"
 
-# 📜 HISTORY STORE
-history_store = []
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
 
-# ✅ Enable CORS
+# =========================
+# 🧱 TABLES
+# =========================
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True)
+    password = Column(String)
+
+class History(Base):
+    __tablename__ = "history"
+    id = Column(Integer, primary_key=True)
+    fileName = Column(String)
+    summary = Column(Text)
+    sentiment = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
+# =========================
+# ✅ CORS
+# =========================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,35 +61,40 @@ app.add_middleware(
 )
 
 # =========================
-# 🔐 LOGIN SYSTEM (NEW)
+# 🔐 AUTH
 # =========================
 @app.post("/api/register")
 def register(data: dict):
-    username = data.get("username")
-    password = data.get("password")
+    db = SessionLocal()
 
-    if username in users_db:
-        return {"error": "User already exists"}
+    user = db.query(User).filter(User.username == data["username"]).first()
+    if user:
+        return {"error": "User exists"}
 
-    users_db[username] = password
+    new_user = User(username=data["username"], password=data["password"])
+    db.add(new_user)
+    db.commit()
+
     return {"message": "User registered"}
 
 @app.post("/api/login")
 def login(data: dict):
-    username = data.get("username")
-    password = data.get("password")
+    db = SessionLocal()
 
-    if users_db.get(username) != password:
+    user = db.query(User).filter(
+        User.username == data["username"],
+        User.password == data["password"]
+    ).first()
+
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return {"message": "Login successful", "user": username}
+    return {"message": "Login successful", "user": user.username}
 
 # =========================
-# ✅ LIGHTWEIGHT NLP
+# NLP
 # =========================
-print("🔄 Loading lightweight NLP...")
 nlp = spacy.blank("en")
-print("✅ Lightweight NLP loaded!")
 
 # =========================
 # 📄 TEXT EXTRACTION
@@ -79,178 +111,133 @@ def extract_text(file_bytes, file_type):
             doc = Document(io.BytesIO(file_bytes))
             return "\n".join([p.text for p in doc.paragraphs])
 
-        elif file_type in ["jpg", "jpeg", "png", "image"]:
+        elif file_type in ["jpg", "jpeg", "png"]:
             image = Image.open(io.BytesIO(file_bytes))
             return pytesseract.image_to_string(image)
 
         elif file_type == "txt":
             return file_bytes.decode("utf-8", errors="ignore")
 
-    except Exception as e:
-        print("❌ Extraction error:", e)
+    except:
+        return ""
 
     return ""
 
 # =========================
-# 🤖 SUMMARY
+# 🤖 AI LOGIC
 # =========================
 def generate_summary(text):
     sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 20]
     return ". ".join(sentences[:3])
 
-# =========================
-# 🧠 ENTITY + KEYWORDS
-# =========================
 def extract_entities(text):
     words = text.split()
 
-    stopwords = ["The", "On", "In", "And", "A", "An", "Is", "Are"]
-
-    names = [
-        w for w in words
-        if w.istitle() and w not in stopwords and len(w) > 2
-    ]
-
-    dates = [
-        w for w in words
-        if any(char.isdigit() for char in w)
-    ]
-
-    keywords = list(set([
-        w.lower() for w in words
-        if len(w) > 6 and w.isalpha()
-    ]))[:5]
+    names = [w for w in words if w.istitle() and len(w) > 2]
+    dates = [w for w in words if any(c.isdigit() for c in w)]
+    keywords = [w.lower() for w in words if len(w) > 6][:5]
 
     return {
         "names": list(set(names[:10])),
         "organizations": [],
         "dates": list(set(dates[:10])),
         "amounts": [],
-        "keywords": keywords
+        "keywords": list(set(keywords))
     }
 
-# =========================
-# 😊 SENTIMENT
-# =========================
 def analyze_sentiment(text):
-    positive_words = ["good", "great", "excellent", "happy"]
-    negative_words = ["bad", "poor", "sad", "worst"]
-
-    text_lower = text.lower()
-
-    pos = sum(word in text_lower for word in positive_words)
-    neg = sum(word in text_lower for word in negative_words)
-
-    if pos > neg:
+    if "good" in text.lower():
         return "POSITIVE"
-    elif neg > pos:
+    elif "bad" in text.lower():
         return "NEGATIVE"
-    else:
-        return "NEUTRAL"
+    return "NEUTRAL"
 
 # =========================
-# 🏠 SERVE FRONTEND
+# ROUTES
 # =========================
 @app.get("/")
-def serve_ui():
+def home():
     return FileResponse("index.html")
 
-# =========================
-# ❤️ HEALTH CHECK
-# =========================
 @app.get("/health")
 def health():
     return {"status": "running"}
 
 # =========================
-# 🚀 MAIN API
+# 🚀 ANALYZE
 # =========================
 @app.post("/api/document-analyze")
 def analyze(data: dict, x_api_key: str = Header(None)):
 
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401)
 
-    file_name = data.get("fileName")
-    file_type = data.get("fileType")
-    file_base64 = data.get("fileBase64")
+    db = SessionLocal()
 
-    if not file_name or not file_type or not file_base64:
-        raise HTTPException(status_code=400, detail="Missing required fields")
-
-    try:
-        file_bytes = base64.b64decode(file_base64)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid Base64 data")
-
-    text = extract_text(file_bytes, file_type)
-
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="No text extracted")
+    file_bytes = base64.b64decode(data["fileBase64"])
+    text = extract_text(file_bytes, data["fileType"])
 
     summary = generate_summary(text)
     entities = extract_entities(text)
     sentiment = analyze_sentiment(text)
 
-    result = {
-        "status": "success",
-        "fileName": file_name,
+    # 💾 SAVE TO DB
+    new_history = History(
+        fileName=data["fileName"],
+        summary=summary,
+        sentiment=sentiment
+    )
+
+    db.add(new_history)
+    db.commit()
+
+    return {
+        "fileName": data["fileName"],
         "text": text,
         "summary": summary,
         "entities": entities,
         "sentiment": sentiment
     }
 
-    # 🔥 SAVE HISTORY
-    history_store.append(result)
-
-    return result
-
 # =========================
-# 📜 HISTORY API
+# 📜 HISTORY FROM DB
 # =========================
 @app.get("/api/history")
 def get_history():
-    return history_store[::-1]
+    db = SessionLocal()
+    records = db.query(History).all()
+
+    return [
+        {
+            "fileName": r.fileName,
+            "summary": r.summary,
+            "sentiment": r.sentiment
+        }
+        for r in records[::-1]
+    ]
 
 # =========================
-# 📄 PDF API
+# 📄 PDF
 # =========================
 @app.post("/api/download-pdf")
 def download_pdf(data: dict, x_api_key: str = Header(None)):
 
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401)
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
 
-    content = []
-
-    content.append(Paragraph("📄 AI Document Analysis Report", styles["Title"]))
-    content.append(Spacer(1, 20))
-
-    content.append(Paragraph("<b>Summary</b>", styles["Heading2"]))
-    content.append(Paragraph(data.get("summary", ""), styles["Normal"]))
-    content.append(Spacer(1, 15))
-
-    content.append(Paragraph("<b>Sentiment</b>", styles["Heading2"]))
-    content.append(Paragraph(data.get("sentiment", ""), styles["Normal"]))
-    content.append(Spacer(1, 15))
-
-    entities = data.get("entities", {})
-
-    content.append(Paragraph("<b>Entities</b>", styles["Heading2"]))
-    content.append(Paragraph(f"Names: {', '.join(entities.get('names', []))}", styles["Normal"]))
-    content.append(Paragraph(f"Dates: {', '.join(entities.get('dates', []))}", styles["Normal"]))
-    content.append(Paragraph(f"Keywords: {', '.join(entities.get('keywords', []))}", styles["Normal"]))
+    content = [
+        Paragraph("📄 AI Report", styles["Title"]),
+        Spacer(1, 20),
+        Paragraph(data.get("summary", ""), styles["Normal"]),
+        Spacer(1, 10),
+        Paragraph(data.get("sentiment", ""), styles["Normal"]),
+    ]
 
     doc.build(content)
     buffer.seek(0)
 
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=report.pdf"}
-    )
+    return StreamingResponse(buffer, media_type="application/pdf")
