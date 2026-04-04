@@ -5,10 +5,15 @@
     <style>
         body {
             font-family: Arial;
-            background: #0f172a;
+            background: linear-gradient(135deg, #0f172a, #020617);
             color: white;
             text-align: center;
             padding: 30px;
+        }
+
+        h1 {
+            color: #00ffcc;
+            text-shadow: 0 0 10px #00ffcc;
         }
 
         .card {
@@ -18,6 +23,12 @@
             margin: 20px auto;
             width: 60%;
             box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0 25px rgba(0,255,200,0.3);
         }
 
         button {
@@ -33,6 +44,10 @@
 
         button:hover {
             background: #16a34a;
+        }
+
+        button:active {
+            transform: scale(0.95);
         }
 
         input {
@@ -52,6 +67,12 @@
             color: #facc15;
             font-weight: bold;
         }
+
+        #history {
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -63,6 +84,7 @@
     <br>
     <button onclick="upload()">Analyze</button>
     <button onclick="downloadResult()">Download</button>
+    <button onclick="clearData()">Clear</button>
 </div>
 
 <div class="card">
@@ -85,7 +107,6 @@
     <div id="highlightedText"></div>
 </div>
 
-<!-- ✅ NEW HISTORY SECTION -->
 <div class="card">
     <h3 class="title">📜 History</h3>
     <div id="history"></div>
@@ -99,7 +120,7 @@ function safeHighlight(text, word, color) {
     return text.replace(regex, `<span style="background:${color}; color:black;">${word}</span>`);
 }
 
-// 🔥 Highlight function
+// 🔥 Highlight
 function highlightText(text, entities) {
     let highlighted = text;
 
@@ -107,16 +128,8 @@ function highlightText(text, entities) {
         highlighted = safeHighlight(highlighted, name, "yellow");
     });
 
-    entities.organizations.forEach(org => {
-        highlighted = safeHighlight(highlighted, org, "lightblue");
-    });
-
     entities.dates.forEach(date => {
         highlighted = safeHighlight(highlighted, date, "lightgreen");
-    });
-
-    entities.amounts.forEach(amount => {
-        highlighted = safeHighlight(highlighted, amount, "pink");
     });
 
     if (entities.keywords) {
@@ -172,23 +185,20 @@ async function upload() {
 
         document.getElementById("entities").innerHTML = `
             <b>👤 Names:</b> ${data.entities.names.join(", ") || "None"} <br><br>
-            <b>🏢 Organizations:</b> ${data.entities.organizations.join(", ") || "None"} <br><br>
             <b>📅 Dates:</b> ${data.entities.dates.join(", ") || "None"} <br><br>
-            <b>💰 Amounts:</b> ${data.entities.amounts.join(", ") || "None"} <br><br>
             <b>🔑 Keywords:</b> ${data.entities.keywords ? data.entities.keywords.join(", ") : "None"}
         `;
 
         const highlighted = highlightText(data.text, data.entities);
         document.getElementById("highlightedText").innerHTML = highlighted;
 
-        // 🔥 Load history after analysis
         loadHistory();
     };
 
     reader.readAsDataURL(file);
 }
 
-// 📜 Load history
+// 📜 History
 async function loadHistory() {
     const res = await fetch("https://doc-analyzer-wfsh.onrender.com/api/history");
     const data = await res.json();
@@ -233,7 +243,15 @@ ${entities}
     a.click();
 }
 
-// 🔥 Load history on page load
+// 🧹 Clear
+function clearData() {
+    document.getElementById("summary").innerHTML = "";
+    document.getElementById("sentiment").innerHTML = "";
+    document.getElementById("entities").innerHTML = "";
+    document.getElementById("highlightedText").innerHTML = "";
+}
+
+// 🔥 Load history
 window.onload = loadHistory;
 
 </script>

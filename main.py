@@ -18,6 +18,12 @@ app = FastAPI()
 
 API_KEY = "test123"
 
+# 🔐 USERS (NEW)
+users_db = {}
+
+# 📜 HISTORY STORE
+history_store = []
+
 # ✅ Enable CORS
 app.add_middleware(
     CORSMiddleware,
@@ -28,9 +34,28 @@ app.add_middleware(
 )
 
 # =========================
-# 🔥 HISTORY STORE (NEW)
+# 🔐 LOGIN SYSTEM (NEW)
 # =========================
-history_store = []
+@app.post("/api/register")
+def register(data: dict):
+    username = data.get("username")
+    password = data.get("password")
+
+    if username in users_db:
+        return {"error": "User already exists"}
+
+    users_db[username] = password
+    return {"message": "User registered"}
+
+@app.post("/api/login")
+def login(data: dict):
+    username = data.get("username")
+    password = data.get("password")
+
+    if users_db.get(username) != password:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    return {"message": "Login successful", "user": username}
 
 # =========================
 # ✅ LIGHTWEIGHT NLP
@@ -67,7 +92,7 @@ def extract_text(file_bytes, file_type):
     return ""
 
 # =========================
-# 🤖 IMPROVED SUMMARY
+# 🤖 SUMMARY
 # =========================
 def generate_summary(text):
     sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 20]
@@ -182,11 +207,11 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     return result
 
 # =========================
-# 📜 HISTORY API (NEW)
+# 📜 HISTORY API
 # =========================
 @app.get("/api/history")
 def get_history():
-    return history_store[::-1]  # latest first
+    return history_store[::-1]
 
 # =========================
 # 📄 PDF API
