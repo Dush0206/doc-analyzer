@@ -5,7 +5,6 @@
     <title>AI Document Analyzer</title>
 
 ```
-<!-- Prevent cache issues -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 
 <style>
@@ -78,6 +77,18 @@
 
 const API_BASE = "https://doc-analyzer-wfsh.onrender.com";
 
+// 🔥 CLEAN FUNCTION
+function cleanList(arr) {
+    if (!arr) return "None";
+
+    return arr
+        .map(x => x.replace(/[^a-zA-Z0-9 ]/g, "")) // remove symbols
+        .filter(x => x.length > 2) // remove short junk
+        .filter(x => !["the","and","for","with","this","that","on","are","is"].includes(x.toLowerCase()))
+        .filter((v, i, a) => a.indexOf(v) === i) // remove duplicates
+        .join(", ") || "None";
+}
+
 async function upload() {
 
     const file = document.getElementById("fileInput").files[0];
@@ -113,21 +124,21 @@ async function upload() {
             // Sentiment
             document.getElementById("sentiment").innerText = data.sentiment || "Unknown";
 
-            // Clean Entities UI (NO JSON)
+            // 🔥 CLEAN ENTITIES OUTPUT
             document.getElementById("entities").innerHTML = `
                 <div class="section">
                     <b>👤 Names:</b><br>
-                    ${data.entities?.names?.join(", ") || "None"}
+                    ${cleanList(data.entities?.names)}
                 </div>
 
                 <div class="section">
                     <b>📅 Dates:</b><br>
-                    ${data.entities?.dates?.join(", ") || "None"}
+                    ${cleanList(data.entities?.dates)}
                 </div>
 
                 <div class="section">
                     <b>🏷 Keywords:</b><br>
-                    ${data.entities?.keywords?.join(", ") || "None"}
+                    ${cleanList(data.entities?.keywords)}
                 </div>
             `;
 
