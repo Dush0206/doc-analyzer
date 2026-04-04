@@ -7,3 +7,5 @@ pillow
 pytesseract
 reportlab
 sqlalchemy
+python-jose
+passlib[bcrypt]

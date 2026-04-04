@@ -11,10 +11,7 @@
             padding: 30px;
         }
 
-        h1 {
-            color: #00ffcc;
-            text-shadow: 0 0 10px #00ffcc;
-        }
+        h1 { color: #00ffcc; }
 
         .card {
             background: #1e293b;
@@ -22,45 +19,32 @@
             border-radius: 12px;
             margin: 20px auto;
             width: 60%;
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 0 25px rgba(0,255,200,0.3);
-        }
-
-        button {
-            padding: 12px 22px;
-            background: #22c55e;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            margin: 5px;
-            transition: 0.3s;
-        }
-
-        button:hover {
-            background: #16a34a;
-        }
-
-        button:active {
-            transform: scale(0.95);
+            box-shadow: 0 0 10px rgba(0,0,0,0.4);
         }
 
         input {
-            margin: 10px;
+            padding: 8px;
+            margin: 5px;
+            border-radius: 6px;
+            border: none;
         }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+            background: #22c55e;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover { background: #16a34a; }
+
+        .title { color: #00ffcc; }
 
         #highlightedText {
             text-align: left;
-            line-height: 1.6;
-        }
-
-        .title {
-            color: #00ffcc;
+            white-space: pre-wrap;
         }
 
         .loading {
@@ -68,10 +52,9 @@
             font-weight: bold;
         }
 
-        #history {
-            max-height: 200px;
-            overflow-y: auto;
-            text-align: left;
+        .user {
+            color: #38bdf8;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -79,12 +62,21 @@
 
 <h1>🤖 AI Document Analyzer</h1>
 
+<p class="user" id="userStatus">Not logged in</p>
+
+<!-- 🔐 LOGIN -->
 <div class="card">
-    <input type="file" id="fileInput">
-    <br>
+    <h3 class="title">🔐 Login</h3>
+    <input id="username" placeholder="Username">
+    <input id="password" type="password" placeholder="Password"><br>
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+</div>
+
+<!-- 📂 UPLOAD -->
+<div class="card">
+    <input type="file" id="fileInput"><br>
     <button onclick="upload()">Analyze</button>
-    <button onclick="downloadResult()">Download</button>
-    <button onclick="clearData()">Clear</button>
 </div>
 
 <div class="card">
@@ -103,156 +95,137 @@
 </div>
 
 <div class="card">
-    <h3 class="title">📄 Highlighted Text</h3>
-    <div id="highlightedText"></div>
+    <h3 class="title">📌 Key Points</h3>
+    <div id="keypoints"></div>
 </div>
 
 <div class="card">
-    <h3 class="title">📜 History</h3>
-    <div id="history"></div>
+    <h3 class="title">❓ Questions</h3>
+    <div id="questions"></div>
+</div>
+
+<div class="card">
+    <h3 class="title">📄 Full Text</h3>
+    <div id="highlightedText"></div>
 </div>
 
 <script>
 
-// 🔥 Safe highlight
-function safeHighlight(text, word, color) {
-    const regex = new RegExp(`\\b${word}\\b`, "gi");
-    return text.replace(regex, `<span style="background:${color}; color:black;">${word}</span>`);
+// 🔥 IMPORTANT → change if deployed
+const API_BASE = "https://doc-analyzer-wfsh.onrender.com" // keep empty for same domain OR use full URL
+
+let token = localStorage.getItem("token") || "";
+let currentUser = localStorage.getItem("user") || "";
+
+// 🔄 Update UI
+function updateUserUI() {
+    document.getElementById("userStatus").innerText =
+        token ? "Logged in as: " + currentUser : "Not logged in";
 }
 
-// 🔥 Highlight
-function highlightText(text, entities) {
-    let highlighted = text;
+// 🔐 REGISTER
+async function register() {
+    const username = usernameEl.value;
+    const password = passwordEl.value;
 
-    entities.names.forEach(name => {
-        highlighted = safeHighlight(highlighted, name, "yellow");
+    const res = await fetch(API_BASE + "/api/register", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username, password })
     });
 
-    entities.dates.forEach(date => {
-        highlighted = safeHighlight(highlighted, date, "lightgreen");
+    const data = await res.json();
+    alert(data.message || data.error);
+}
+
+// 🔐 LOGIN
+async function login() {
+    const username = usernameEl.value;
+    const password = passwordEl.value;
+
+    const res = await fetch(API_BASE + "/api/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username, password })
     });
 
-    if (entities.keywords) {
-        entities.keywords.forEach(keyword => {
-            highlighted = safeHighlight(highlighted, keyword, "orange");
-        });
+    const data = await res.json();
+
+    if (data.access_token) {
+        token = data.access_token;
+        localStorage.setItem("token", token);
+        localStorage.setItem("user", username);
+        currentUser = username;
+        updateUserUI();
+        alert("Login successful ✅");
+    } else {
+        alert("Login failed ❌");
     }
-
-    return highlighted;
 }
 
-// 🚀 Upload
+// 🚀 ANALYZE
 async function upload() {
+
     const file = document.getElementById("fileInput").files[0];
+    if (!file) return alert("Select a file");
 
-    if (!file) {
-        alert("Please select a file");
-        return;
-    }
+    if (!token) return alert("Login first");
 
-    document.getElementById("summary").innerHTML = "<span class='loading'>⏳ Analyzing...</span>";
-    document.getElementById("sentiment").innerHTML = "";
-    document.getElementById("entities").innerHTML = "";
-    document.getElementById("highlightedText").innerHTML = "";
+    document.getElementById("summary").innerHTML =
+        "<span class='loading'>⏳ Processing...</span>";
 
     const reader = new FileReader();
 
     reader.onload = async function() {
+
         const base64 = reader.result.split(",")[1];
 
-        const res = await fetch("https://doc-analyzer-wfsh.onrender.com/api/document-analyze", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": "test123"
-            },
-            body: JSON.stringify({
-                fileName: file.name,
-                fileType: file.name.split('.').pop(),
-                fileBase64: base64
-            })
-        });
+        try {
+            const res = await fetch(API_BASE + "/api/document-analyze", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    fileType: file.name.split('.').pop(),
+                    fileBase64: base64
+                })
+            });
 
-        const data = await res.json();
+            const data = await res.json();
 
-        document.getElementById("summary").innerText = data.summary;
+            document.getElementById("summary").innerText = data.summary || "";
+            document.getElementById("sentiment").innerText = data.sentiment || "";
 
-        let emoji = "😐";
-        if (data.sentiment === "POSITIVE") emoji = "😊";
-        if (data.sentiment === "NEGATIVE") emoji = "😞";
+            // ✅ FULL ENTITIES
+            document.getElementById("entities").innerHTML = `
+                <b>Names:</b> ${data.entities?.names?.join(", ") || "None"} <br>
+                <b>Dates:</b> ${data.entities?.dates?.join(", ") || "None"} <br>
+                <b>Keywords:</b> ${data.entities?.keywords?.join(", ") || "None"}
+            `;
 
-        document.getElementById("sentiment").innerHTML = `${emoji} ${data.sentiment}`;
+            // ✅ SAFE KEY POINTS
+            document.getElementById("keypoints").innerHTML =
+                (data.key_points || []).map(p => "• " + p).join("<br>") || "None";
 
-        document.getElementById("entities").innerHTML = `
-            <b>👤 Names:</b> ${data.entities.names.join(", ") || "None"} <br><br>
-            <b>📅 Dates:</b> ${data.entities.dates.join(", ") || "None"} <br><br>
-            <b>🔑 Keywords:</b> ${data.entities.keywords ? data.entities.keywords.join(", ") : "None"}
-        `;
+            // ✅ SAFE QUESTIONS
+            document.getElementById("questions").innerHTML =
+                (data.questions || []).map(q => "• " + q).join("<br>") || "None";
 
-        const highlighted = highlightText(data.text, data.entities);
-        document.getElementById("highlightedText").innerHTML = highlighted;
+            document.getElementById("highlightedText").innerText = data.text || "";
 
-        loadHistory();
+        } catch (err) {
+            alert("Server error ⚠️");
+        }
     };
 
     reader.readAsDataURL(file);
 }
 
-// 📜 History
-async function loadHistory() {
-    const res = await fetch("https://doc-analyzer-wfsh.onrender.com/api/history");
-    const data = await res.json();
-
-    let html = "";
-
-    data.forEach(item => {
-        html += `
-            <div style="border-bottom:1px solid gray; margin-bottom:10px; padding:5px;">
-                <b>📄 ${item.fileName}</b><br>
-                <small>${item.summary.substring(0, 80)}...</small>
-            </div>
-        `;
-    });
-
-    document.getElementById("history").innerHTML = html;
-}
-
-// 📥 Download
-function downloadResult() {
-    const summary = document.getElementById("summary").innerText;
-    const sentiment = document.getElementById("sentiment").innerText;
-    const entities = document.getElementById("entities").innerText;
-
-    const content = `
-SUMMARY:
-${summary}
-
-SENTIMENT:
-${sentiment}
-
-ENTITIES:
-${entities}
-`;
-
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "analysis.txt";
-    a.click();
-}
-
-// 🧹 Clear
-function clearData() {
-    document.getElementById("summary").innerHTML = "";
-    document.getElementById("sentiment").innerHTML = "";
-    document.getElementById("entities").innerHTML = "";
-    document.getElementById("highlightedText").innerHTML = "";
-}
-
-// 🔥 Load history
-window.onload = loadHistory;
+// 🔄 Restore login
+updateUserUI();
 
 </script>
 

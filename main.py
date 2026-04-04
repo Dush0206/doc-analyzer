@@ -9,21 +9,33 @@ import pytesseract
 import io
 import base64
 
-# ✅ PDF
+# PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from io import BytesIO
 
-# ✅ DATABASE
+# DATABASE
 from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+# JWT + HASH
+from jose import jwt
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
+
 app = FastAPI()
 
-API_KEY = "test123"
+# =========================
+# 🔐 JWT CONFIG
+# =========================
+SECRET_KEY = "supersecretkey"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # =========================
-# 💾 DATABASE SETUP
+# 💾 DATABASE
 # =========================
 DATABASE_URL = "sqlite:///./app.db"
 
@@ -61,6 +73,28 @@ app.add_middleware(
 )
 
 # =========================
+# 🔐 SECURITY
+# =========================
+def hash_password(password):
+    return pwd_context.hash(password)
+
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
+
+def create_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=60)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# =========================
 # 🔐 AUTH
 # =========================
 @app.post("/api/register")
@@ -71,7 +105,11 @@ def register(data: dict):
     if user:
         return {"error": "User exists"}
 
-    new_user = User(username=data["username"], password=data["password"])
+    new_user = User(
+        username=data["username"],
+        password=hash_password(data["password"])
+    )
+
     db.add(new_user)
     db.commit()
 
@@ -81,15 +119,17 @@ def register(data: dict):
 def login(data: dict):
     db = SessionLocal()
 
-    user = db.query(User).filter(
-        User.username == data["username"],
-        User.password == data["password"]
-    ).first()
+    user = db.query(User).filter(User.username == data["username"]).first()
 
-    if not user:
+    if not user or not verify_password(data["password"], user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return {"message": "Login successful", "user": user.username}
+    token = create_token({"sub": user.username})
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 # =========================
 # NLP
@@ -152,6 +192,20 @@ def analyze_sentiment(text):
         return "NEGATIVE"
     return "NEUTRAL"
 
+# 🔥 NEW AI FEATURES
+def extract_key_points(text):
+    sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 30]
+    return sentences[:5]
+
+def generate_questions(text):
+    sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 40]
+
+    questions = []
+    for s in sentences[:3]:
+        questions.append("What is meant by: " + s[:50] + "?")
+
+    return questions
+
 # =========================
 # ROUTES
 # =========================
@@ -167,10 +221,13 @@ def health():
 # 🚀 ANALYZE
 # =========================
 @app.post("/api/document-analyze")
-def analyze(data: dict, x_api_key: str = Header(None)):
+def analyze(data: dict, authorization: str = Header(None)):
 
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401)
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    token = authorization.split(" ")[1]
+    user = verify_token(token)
 
     db = SessionLocal()
 
@@ -181,7 +238,9 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     entities = extract_entities(text)
     sentiment = analyze_sentiment(text)
 
-    # 💾 SAVE TO DB
+    key_points = extract_key_points(text)
+    questions = generate_questions(text)
+
     new_history = History(
         fileName=data["fileName"],
         summary=summary,
@@ -192,15 +251,18 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     db.commit()
 
     return {
+        "user": user,
         "fileName": data["fileName"],
         "text": text,
         "summary": summary,
         "entities": entities,
-        "sentiment": sentiment
+        "sentiment": sentiment,
+        "key_points": key_points,
+        "questions": questions
     }
 
 # =========================
-# 📜 HISTORY FROM DB
+# 📜 HISTORY
 # =========================
 @app.get("/api/history")
 def get_history():
@@ -220,9 +282,9 @@ def get_history():
 # 📄 PDF
 # =========================
 @app.post("/api/download-pdf")
-def download_pdf(data: dict, x_api_key: str = Header(None)):
+def download_pdf(data: dict, authorization: str = Header(None)):
 
-    if x_api_key != API_KEY:
+    if not authorization:
         raise HTTPException(status_code=401)
 
     buffer = BytesIO()
