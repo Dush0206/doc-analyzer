@@ -1,11 +1,7 @@
 fastapi
 uvicorn
-spacy
 pymupdf
 python-docx
 pillow
 pytesseract
 reportlab
-sqlalchemy
-python-jose
-passlib[bcrypt]

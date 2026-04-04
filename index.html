@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 <head>
     <title>AI Document Analyzer</title>
@@ -12,57 +11,34 @@
             padding: 30px;
         }
 
-```
-    h1 { color: #00ffcc; }
+        h1 { color: #00ffcc; }
 
-    .card {
-        background: #1e293b;
-        padding: 20px;
-        border-radius: 12px;
-        margin: 20px auto;
-        width: 60%;
-    }
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px auto;
+            width: 60%;
+        }
 
-    input {
-        padding: 8px;
-        margin: 5px;
-        border-radius: 6px;
-        border: none;
-    }
+        button {
+            padding: 10px;
+            margin: 5px;
+            background: #22c55e;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
 
-    button {
-        padding: 10px;
-        margin: 5px;
-        background: #22c55e;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-    }
-
-    button:hover { background: #16a34a; }
-
-    .user {
-        color: #38bdf8;
-    }
-</style>
-```
-
+        button:hover { background: #16a34a; }
+    </style>
 </head>
 <body>
 
 <h1>🤖 AI Document Analyzer</h1>
-<p class="user" id="userStatus">Not logged in</p>
 
 <div class="card">
-    <h3>🔐 Login</h3>
-    <input id="username" placeholder="Username">
-    <input id="password" type="password" placeholder="Password"><br>
-    <button onclick="register()">Register</button>
-    <button onclick="login()">Login</button>
-</div>
-
-<div class="card">
-    <input type="file" id="fileInput"><br>
+    <input type="file" id="fileInput"><br><br>
     <button onclick="upload()">Analyze</button>
 </div>
 
@@ -81,93 +57,14 @@
     <div id="entities"></div>
 </div>
 
-<div class="card">
-    <h3>📌 Key Points</h3>
-    <div id="keypoints"></div>
-</div>
-
-<div class="card">
-    <h3>❓ Questions</h3>
-    <div id="questions"></div>
-</div>
-
-<div class="card">
-    <h3>📄 Full Text</h3>
-    <div id="highlightedText"></div>
-</div>
-
 <script>
 
 const API_BASE = "https://doc-analyzer-wfsh.onrender.com";
 
-let usernameEl, passwordEl;
-let token = "";
-let currentUser = "";
-
-// UI update
-function updateUserUI() {
-    document.getElementById("userStatus").innerText =
-        token ? "Logged in as: " + currentUser : "Not logged in";
-}
-
-// REGISTER
-async function register() {
-    const res = await fetch(API_BASE + "/api/register", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            username: usernameEl.value,
-            password: passwordEl.value
-        })
-    });
-
-    const data = await res.json();
-    alert(data.message || data.error);
-}
-
-// LOGIN
-async function login() {
-    const res = await fetch(API_BASE + "/api/login", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            username: usernameEl.value,
-            password: passwordEl.value
-        })
-    });
-
-    const data = await res.json();
-    console.log("LOGIN:", data);
-
-    if (data.access_token) {
-        token = data.access_token;
-        currentUser = usernameEl.value;
-
-        localStorage.setItem("token", token);
-        localStorage.setItem("user", currentUser);
-
-        updateUserUI();
-        alert("Login successful ✅");
-    } else {
-        alert("Login failed ❌");
-    }
-}
-
-// ANALYZE (🔥 FINAL FIX HERE)
 async function upload() {
 
     const file = document.getElementById("fileInput").files[0];
-    if (!file) return alert("Select a file");
-
-    // 🔥 ALWAYS GET LATEST TOKEN
-    const storedToken = localStorage.getItem("token");
-
-    if (!storedToken) {
-        alert("Login first");
-        return;
-    }
-
-    document.getElementById("summary").innerText = "⏳ Processing...";
+    if (!file) return alert("Select file");
 
     const reader = new FileReader();
 
@@ -175,58 +72,30 @@ async function upload() {
 
         const base64 = reader.result.split(",")[1];
 
-        try {
-            const res = await fetch(API_BASE + "/api/document-analyze", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + storedToken
-                },
-                body: JSON.stringify({
-                    fileName: file.name,
-                    fileType: file.name.split('.').pop(),
-                    fileBase64: base64
-                })
-            });
+        const res = await fetch(API_BASE + "/api/document-analyze", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-api-key": "sk_track2_987654321"
+            },
+            body: JSON.stringify({
+                fileName: file.name,
+                fileType: file.name.split('.').pop(),
+                fileBase64: base64
+            })
+        });
 
-            const data = await res.json();
+        const data = await res.json();
 
-            document.getElementById("summary").innerText = data.summary || "";
-            document.getElementById("sentiment").innerText = data.sentiment || "";
+        document.getElementById("summary").innerText = data.summary;
+        document.getElementById("sentiment").innerText = data.sentiment;
 
-            document.getElementById("entities").innerHTML = `
-                <b>Names:</b> ${data.entities?.names?.join(", ") || "None"} <br>
-                <b>Dates:</b> ${data.entities?.dates?.join(", ") || "None"} <br>
-                <b>Keywords:</b> ${data.entities?.keywords?.join(", ") || "None"}
-            `;
-
-            document.getElementById("keypoints").innerHTML =
-                (data.key_points || []).map(p => "• " + p).join("<br>") || "None";
-
-            document.getElementById("questions").innerHTML =
-                (data.questions || []).map(q => "• " + q).join("<br>") || "None";
-
-            document.getElementById("highlightedText").innerText = data.text || "";
-
-        } catch (err) {
-            console.error(err);
-            alert("Server error ⚠️");
-        }
+        document.getElementById("entities").innerText =
+            JSON.stringify(data.entities, null, 2);
     };
 
     reader.readAsDataURL(file);
 }
-
-// LOAD INIT
-window.onload = () => {
-    usernameEl = document.getElementById("username");
-    passwordEl = document.getElementById("password");
-
-    token = localStorage.getItem("token") || "";
-    currentUser = localStorage.getItem("user") || "";
-
-    updateUserUI();
-};
 
 </script>
 
