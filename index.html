@@ -64,7 +64,6 @@
 
 <p class="user" id="userStatus">Not logged in</p>
 
-<!-- 🔐 LOGIN -->
 <div class="card">
     <h3 class="title">🔐 Login</h3>
     <input id="username" placeholder="Username">
@@ -73,7 +72,6 @@
     <button onclick="login()">Login</button>
 </div>
 
-<!-- 📂 UPLOAD -->
 <div class="card">
     <input type="file" id="fileInput"><br>
     <button onclick="upload()">Analyze</button>
@@ -111,11 +109,11 @@
 
 <script>
 
-// 🔥 IMPORTANT → change if deployed
-const API_BASE = "https://doc-analyzer-wfsh.onrender.com" // keep empty for same domain OR use full URL
+const API_BASE = "https://doc-analyzer-wfsh.onrender.com";
 
-let token = localStorage.getItem("token") || "";
-let currentUser = localStorage.getItem("user") || "";
+let usernameEl, passwordEl;
+let token = "";
+let currentUser = "";
 
 // 🔄 Update UI
 function updateUserUI() {
@@ -125,13 +123,13 @@ function updateUserUI() {
 
 // 🔐 REGISTER
 async function register() {
-    const username = usernameEl.value;
-    const password = passwordEl.value;
-
     const res = await fetch(API_BASE + "/api/register", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({
+            username: usernameEl.value,
+            password: passwordEl.value
+        })
     });
 
     const data = await res.json();
@@ -140,22 +138,25 @@ async function register() {
 
 // 🔐 LOGIN
 async function login() {
-    const username = usernameEl.value;
-    const password = passwordEl.value;
-
     const res = await fetch(API_BASE + "/api/login", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({
+            username: usernameEl.value,
+            password: passwordEl.value
+        })
     });
 
     const data = await res.json();
+    console.log("LOGIN:", data); // debug
 
     if (data.access_token) {
         token = data.access_token;
+        currentUser = usernameEl.value;
+
         localStorage.setItem("token", token);
-        localStorage.setItem("user", username);
-        currentUser = username;
+        localStorage.setItem("user", currentUser);
+
         updateUserUI();
         alert("Login successful ✅");
     } else {
@@ -199,24 +200,22 @@ async function upload() {
             document.getElementById("summary").innerText = data.summary || "";
             document.getElementById("sentiment").innerText = data.sentiment || "";
 
-            // ✅ FULL ENTITIES
             document.getElementById("entities").innerHTML = `
                 <b>Names:</b> ${data.entities?.names?.join(", ") || "None"} <br>
                 <b>Dates:</b> ${data.entities?.dates?.join(", ") || "None"} <br>
                 <b>Keywords:</b> ${data.entities?.keywords?.join(", ") || "None"}
             `;
 
-            // ✅ SAFE KEY POINTS
             document.getElementById("keypoints").innerHTML =
                 (data.key_points || []).map(p => "• " + p).join("<br>") || "None";
 
-            // ✅ SAFE QUESTIONS
             document.getElementById("questions").innerHTML =
                 (data.questions || []).map(q => "• " + q).join("<br>") || "None";
 
             document.getElementById("highlightedText").innerText = data.text || "";
 
         } catch (err) {
+            console.log(err);
             alert("Server error ⚠️");
         }
     };
@@ -224,8 +223,16 @@ async function upload() {
     reader.readAsDataURL(file);
 }
 
-// 🔄 Restore login
-updateUserUI();
+// 🔥 FIX: run after DOM loads
+window.onload = () => {
+    usernameEl = document.getElementById("username");
+    passwordEl = document.getElementById("password");
+
+    token = localStorage.getItem("token") || "";
+    currentUser = localStorage.getItem("user") || "";
+
+    updateUserUI();
+};
 
 </script>
 

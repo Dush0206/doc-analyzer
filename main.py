@@ -1,13 +1,10 @@
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-import spacy
-import fitz
+import spacy, fitz, io, base64
 from docx import Document
 from PIL import Image
 import pytesseract
-import io
-import base64
 
 # PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -25,27 +22,18 @@ from datetime import datetime, timedelta
 
 app = FastAPI()
 
-# =========================
-# 🔐 JWT CONFIG
-# =========================
+# ================= JWT =================
 SECRET_KEY = "supersecretkey"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# =========================
-# 💾 DATABASE
-# =========================
-DATABASE_URL = "sqlite:///./app.db"
-
-engine = create_engine(DATABASE_URL)
+# ================= DB =================
+engine = create_engine("sqlite:///./app.db")
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# =========================
-# 🧱 TABLES
-# =========================
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
@@ -55,15 +43,14 @@ class User(Base):
 class History(Base):
     __tablename__ = "history"
     id = Column(Integer, primary_key=True)
+    username = Column(String)   # 🔥 IMPORTANT FIX
     fileName = Column(String)
     summary = Column(Text)
     sentiment = Column(String)
 
 Base.metadata.create_all(bind=engine)
 
-# =========================
-# ✅ CORS
-# =========================
+# ================= CORS =================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -72,9 +59,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# 🔐 SECURITY
-# =========================
+# ================= SECURITY =================
 def hash_password(password):
     return pwd_context.hash(password)
 
@@ -82,10 +67,8 @@ def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
 
 def create_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=60)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    data["exp"] = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 def verify_token(token: str):
     try:
@@ -94,23 +77,18 @@ def verify_token(token: str):
     except:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# =========================
-# 🔐 AUTH
-# =========================
+# ================= AUTH =================
 @app.post("/api/register")
 def register(data: dict):
     db = SessionLocal()
 
-    user = db.query(User).filter(User.username == data["username"]).first()
-    if user:
+    if db.query(User).filter(User.username == data["username"]).first():
         return {"error": "User exists"}
 
-    new_user = User(
+    db.add(User(
         username=data["username"],
         password=hash_password(data["password"])
-    )
-
-    db.add(new_user)
+    ))
     db.commit()
 
     return {"message": "User registered"}
@@ -124,91 +102,66 @@ def login(data: dict):
     if not user or not verify_password(data["password"], user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_token({"sub": user.username})
-
     return {
-        "access_token": token,
-        "token_type": "bearer"
+        "access_token": create_token({"sub": user.username})
     }
 
-# =========================
-# NLP
-# =========================
+# ================= NLP =================
 nlp = spacy.blank("en")
 
-# =========================
-# 📄 TEXT EXTRACTION
-# =========================
+# ================= TEXT EXTRACTION =================
 def extract_text(file_bytes, file_type):
-    file_type = file_type.lower()
-
     try:
+        file_type = file_type.lower()
+
         if file_type == "pdf":
             doc = fitz.open(stream=file_bytes, filetype="pdf")
-            return " ".join([page.get_text() for page in doc])
+            return " ".join([p.get_text() for p in doc])
 
         elif file_type == "docx":
             doc = Document(io.BytesIO(file_bytes))
             return "\n".join([p.text for p in doc.paragraphs])
 
         elif file_type in ["jpg", "jpeg", "png"]:
-            image = Image.open(io.BytesIO(file_bytes))
-            return pytesseract.image_to_string(image)
+            img = Image.open(io.BytesIO(file_bytes))
+            return pytesseract.image_to_string(img)
 
         elif file_type == "txt":
-            return file_bytes.decode("utf-8", errors="ignore")
+            return file_bytes.decode("utf-8", "ignore")
 
-    except:
-        return ""
+    except Exception as e:
+        print("Error:", e)
 
     return ""
 
-# =========================
-# 🤖 AI LOGIC
-# =========================
+# ================= AI LOGIC =================
 def generate_summary(text):
-    sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 20]
-    return ". ".join(sentences[:3])
+    return ". ".join([s.strip() for s in text.split(".") if len(s.strip()) > 20][:3])
 
 def extract_entities(text):
     words = text.split()
 
-    names = [w for w in words if w.istitle() and len(w) > 2]
-    dates = [w for w in words if any(c.isdigit() for c in w)]
-    keywords = [w.lower() for w in words if len(w) > 6][:5]
-
     return {
-        "names": list(set(names[:10])),
-        "organizations": [],
-        "dates": list(set(dates[:10])),
-        "amounts": [],
-        "keywords": list(set(keywords))
+        "names": list(set([w for w in words if w.istitle()][:10])),
+        "dates": list(set([w for w in words if any(c.isdigit() for c in w)][:10])),
+        "keywords": list(set([w.lower() for w in words if len(w) > 6][:5]))
     }
 
 def analyze_sentiment(text):
-    if "good" in text.lower():
-        return "POSITIVE"
-    elif "bad" in text.lower():
-        return "NEGATIVE"
+    t = text.lower()
+    if "good" in t: return "POSITIVE"
+    if "bad" in t: return "NEGATIVE"
     return "NEUTRAL"
 
-# 🔥 NEW AI FEATURES
+# 🔥 NEW FEATURES
 def extract_key_points(text):
-    sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 30]
-    return sentences[:5]
+    return [s.strip() for s in text.split(".") if len(s.strip()) > 30][:5]
 
 def generate_questions(text):
     sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 40]
+    return ["What is meant by: " + s[:50] + "?" for s in sentences[:3]]
 
-    questions = []
-    for s in sentences[:3]:
-        questions.append("What is meant by: " + s[:50] + "?")
-
-    return questions
-
-# =========================
-# ROUTES
-# =========================
+# ================= ROUTES =================
 @app.get("/")
 def home():
     return FileResponse("index.html")
@@ -217,37 +170,34 @@ def home():
 def health():
     return {"status": "running"}
 
-# =========================
-# 🚀 ANALYZE
-# =========================
+# ================= ANALYZE =================
 @app.post("/api/document-analyze")
 def analyze(data: dict, authorization: str = Header(None)):
 
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
 
-    token = authorization.split(" ")[1]
-    user = verify_token(token)
-
+    user = verify_token(authorization.split(" ")[1])
     db = SessionLocal()
 
-    file_bytes = base64.b64decode(data["fileBase64"])
-    text = extract_text(file_bytes, data["fileType"])
+    text = extract_text(
+        base64.b64decode(data["fileBase64"]),
+        data["fileType"]
+    )
 
     summary = generate_summary(text)
     entities = extract_entities(text)
     sentiment = analyze_sentiment(text)
-
     key_points = extract_key_points(text)
     questions = generate_questions(text)
 
-    new_history = History(
+    # 🔥 USER-BASED HISTORY FIX
+    db.add(History(
+        username=user,
         fileName=data["fileName"],
         summary=summary,
         sentiment=sentiment
-    )
-
-    db.add(new_history)
+    ))
     db.commit()
 
     return {
@@ -261,13 +211,17 @@ def analyze(data: dict, authorization: str = Header(None)):
         "questions": questions
     }
 
-# =========================
-# 📜 HISTORY
-# =========================
+# ================= HISTORY =================
 @app.get("/api/history")
-def get_history():
+def get_history(authorization: str = Header(None)):
+
+    if not authorization:
+        raise HTTPException(status_code=401)
+
+    user = verify_token(authorization.split(" ")[1])
     db = SessionLocal()
-    records = db.query(History).all()
+
+    records = db.query(History).filter(History.username == user).all()
 
     return [
         {
@@ -278,9 +232,7 @@ def get_history():
         for r in records[::-1]
     ]
 
-# =========================
-# 📄 PDF
-# =========================
+# ================= PDF =================
 @app.post("/api/download-pdf")
 def download_pdf(data: dict, authorization: str = Header(None)):
 
