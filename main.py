@@ -62,28 +62,42 @@ def extract_text(file_bytes, file_type):
     return ""
 
 # =========================
-# 🤖 SUMMARY
+# 🤖 IMPROVED SUMMARY
 # =========================
 def generate_summary(text):
-    sentences = text.split(".")
-    return ".".join(sentences[:3])
+    sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 20]
+    return ". ".join(sentences[:3])
 
 # =========================
-# 🧠 ENTITY EXTRACTION (IMPROVED)
+# 🧠 IMPROVED ENTITY + KEYWORDS
 # =========================
 def extract_entities(text):
     words = text.split()
 
-    stopwords = ["The", "On", "In", "And", "A", "An"]
+    stopwords = ["The", "On", "In", "And", "A", "An", "Is", "Are"]
 
-    names = [w for w in words if w.istitle() and w not in stopwords]
-    dates = [w for w in words if any(char.isdigit() for char in w)]
+    names = [
+        w for w in words
+        if w.istitle() and w not in stopwords and len(w) > 2
+    ]
+
+    dates = [
+        w for w in words
+        if any(char.isdigit() for char in w)
+    ]
+
+    # 🔥 NEW: Keywords
+    keywords = list(set([
+        w.lower() for w in words
+        if len(w) > 6 and w.isalpha()
+    ]))[:5]
 
     return {
         "names": list(set(names[:10])),
         "organizations": [],
         "dates": list(set(dates[:10])),
-        "amounts": []
+        "amounts": [],
+        "keywords": keywords
     }
 
 # =========================
@@ -159,7 +173,7 @@ def analyze(data: dict, x_api_key: str = Header(None)):
     }
 
 # =========================
-# 📄 PDF DOWNLOAD API
+# 📄 IMPROVED PDF API
 # =========================
 @app.post("/api/download-pdf")
 def download_pdf(data: dict, x_api_key: str = Header(None)):
@@ -173,25 +187,33 @@ def download_pdf(data: dict, x_api_key: str = Header(None)):
 
     content = []
 
-    content.append(Paragraph("AI Document Analysis Report", styles["Title"]))
+    # 🔥 Title
+    content.append(Paragraph("📄 AI Document Analysis Report", styles["Title"]))
     content.append(Spacer(1, 20))
 
-    content.append(Paragraph(f"Summary: {data.get('summary')}", styles["Normal"]))
-    content.append(Spacer(1, 10))
+    # 🔹 Summary
+    content.append(Paragraph("<b>Summary</b>", styles["Heading2"]))
+    content.append(Paragraph(data.get("summary", ""), styles["Normal"]))
+    content.append(Spacer(1, 15))
 
-    content.append(Paragraph(f"Sentiment: {data.get('sentiment')}", styles["Normal"]))
-    content.append(Spacer(1, 10))
+    # 🔹 Sentiment
+    content.append(Paragraph("<b>Sentiment</b>", styles["Heading2"]))
+    content.append(Paragraph(data.get("sentiment", ""), styles["Normal"]))
+    content.append(Spacer(1, 15))
 
+    # 🔹 Entities
     entities = data.get("entities", {})
 
+    content.append(Paragraph("<b>Entities</b>", styles["Heading2"]))
     content.append(Paragraph(f"Names: {', '.join(entities.get('names', []))}", styles["Normal"]))
-    content.append(Paragraph(f"Organizations: {', '.join(entities.get('organizations', []))}", styles["Normal"]))
     content.append(Paragraph(f"Dates: {', '.join(entities.get('dates', []))}", styles["Normal"]))
-    content.append(Paragraph(f"Amounts: {', '.join(entities.get('amounts', []))}", styles["Normal"]))
+    content.append(Paragraph(f"Keywords: {', '.join(entities.get('keywords', []))}", styles["Normal"]))
 
     doc.build(content)
     buffer.seek(0)
 
-    return StreamingResponse(buffer, media_type="application/pdf", headers={
-        "Content-Disposition": "attachment; filename=analysis.pdf"
-    })
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=report.pdf"}
+    )
