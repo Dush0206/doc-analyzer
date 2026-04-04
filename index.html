@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html>
 <head>
     <title>AI Document Analyzer</title>
@@ -11,61 +12,49 @@
             padding: 30px;
         }
 
-        h1 { color: #00ffcc; }
+```
+    h1 { color: #00ffcc; }
 
-        .card {
-            background: #1e293b;
-            padding: 20px;
-            border-radius: 12px;
-            margin: 20px auto;
-            width: 60%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.4);
-        }
+    .card {
+        background: #1e293b;
+        padding: 20px;
+        border-radius: 12px;
+        margin: 20px auto;
+        width: 60%;
+    }
 
-        input {
-            padding: 8px;
-            margin: 5px;
-            border-radius: 6px;
-            border: none;
-        }
+    input {
+        padding: 8px;
+        margin: 5px;
+        border-radius: 6px;
+        border: none;
+    }
 
-        button {
-            padding: 10px;
-            margin: 5px;
-            background: #22c55e;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
+    button {
+        padding: 10px;
+        margin: 5px;
+        background: #22c55e;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
 
-        button:hover { background: #16a34a; }
+    button:hover { background: #16a34a; }
 
-        .title { color: #00ffcc; }
+    .user {
+        color: #38bdf8;
+    }
+</style>
+```
 
-        #highlightedText {
-            text-align: left;
-            white-space: pre-wrap;
-        }
-
-        .loading {
-            color: #facc15;
-            font-weight: bold;
-        }
-
-        .user {
-            color: #38bdf8;
-            font-size: 14px;
-        }
-    </style>
 </head>
 <body>
 
 <h1>🤖 AI Document Analyzer</h1>
-
 <p class="user" id="userStatus">Not logged in</p>
 
 <div class="card">
-    <h3 class="title">🔐 Login</h3>
+    <h3>🔐 Login</h3>
     <input id="username" placeholder="Username">
     <input id="password" type="password" placeholder="Password"><br>
     <button onclick="register()">Register</button>
@@ -78,32 +67,32 @@
 </div>
 
 <div class="card">
-    <h3 class="title">📄 Summary</h3>
+    <h3>📄 Summary</h3>
     <p id="summary"></p>
 </div>
 
 <div class="card">
-    <h3 class="title">😊 Sentiment</h3>
+    <h3>😊 Sentiment</h3>
     <p id="sentiment"></p>
 </div>
 
 <div class="card">
-    <h3 class="title">🧠 Entities</h3>
+    <h3>🧠 Entities</h3>
     <div id="entities"></div>
 </div>
 
 <div class="card">
-    <h3 class="title">📌 Key Points</h3>
+    <h3>📌 Key Points</h3>
     <div id="keypoints"></div>
 </div>
 
 <div class="card">
-    <h3 class="title">❓ Questions</h3>
+    <h3>❓ Questions</h3>
     <div id="questions"></div>
 </div>
 
 <div class="card">
-    <h3 class="title">📄 Full Text</h3>
+    <h3>📄 Full Text</h3>
     <div id="highlightedText"></div>
 </div>
 
@@ -115,13 +104,13 @@ let usernameEl, passwordEl;
 let token = "";
 let currentUser = "";
 
-// 🔄 Update UI
+// UI update
 function updateUserUI() {
     document.getElementById("userStatus").innerText =
         token ? "Logged in as: " + currentUser : "Not logged in";
 }
 
-// 🔐 REGISTER
+// REGISTER
 async function register() {
     const res = await fetch(API_BASE + "/api/register", {
         method: "POST",
@@ -136,7 +125,7 @@ async function register() {
     alert(data.message || data.error);
 }
 
-// 🔐 LOGIN
+// LOGIN
 async function login() {
     const res = await fetch(API_BASE + "/api/login", {
         method: "POST",
@@ -148,7 +137,7 @@ async function login() {
     });
 
     const data = await res.json();
-    console.log("LOGIN:", data); // debug
+    console.log("LOGIN:", data);
 
     if (data.access_token) {
         token = data.access_token;
@@ -164,16 +153,21 @@ async function login() {
     }
 }
 
-// 🚀 ANALYZE
+// ANALYZE (🔥 FINAL FIX HERE)
 async function upload() {
 
     const file = document.getElementById("fileInput").files[0];
     if (!file) return alert("Select a file");
 
-    if (!token) return alert("Login first");
+    // 🔥 ALWAYS GET LATEST TOKEN
+    const storedToken = localStorage.getItem("token");
 
-    document.getElementById("summary").innerHTML =
-        "<span class='loading'>⏳ Processing...</span>";
+    if (!storedToken) {
+        alert("Login first");
+        return;
+    }
+
+    document.getElementById("summary").innerText = "⏳ Processing...";
 
     const reader = new FileReader();
 
@@ -186,7 +180,7 @@ async function upload() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": "Bearer " + token
+                    "Authorization": "Bearer " + storedToken
                 },
                 body: JSON.stringify({
                     fileName: file.name,
@@ -215,7 +209,7 @@ async function upload() {
             document.getElementById("highlightedText").innerText = data.text || "";
 
         } catch (err) {
-            console.log(err);
+            console.error(err);
             alert("Server error ⚠️");
         }
     };
@@ -223,7 +217,7 @@ async function upload() {
     reader.readAsDataURL(file);
 }
 
-// 🔥 FIX: run after DOM loads
+// LOAD INIT
 window.onload = () => {
     usernameEl = document.getElementById("username");
     passwordEl = document.getElementById("password");
